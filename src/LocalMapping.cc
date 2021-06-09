@@ -25,6 +25,12 @@
 
 #include<mutex>
 
+#include <unistd.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <iostream>
+using namespace std;
+
 namespace ORB_SLAM2
 {
 
@@ -316,6 +322,9 @@ void LocalMapping::CreateNewMapPoints()
             cosParallaxStereo = min(cosParallaxStereo1,cosParallaxStereo2);
 
             cv::Mat x3D;
+            // Added 2021-06-09 18:34
+            cv::Scalar color;
+            // cout << "AddNewMapPoint, ";
             if(cosParallaxRays<cosParallaxStereo && cosParallaxRays>0 && (bStereo1 || bStereo2 || cosParallaxRays<0.9998))
             {
                 // Linear Triangulation Method
@@ -335,15 +344,23 @@ void LocalMapping::CreateNewMapPoints()
 
                 // Euclidean coordinates
                 x3D = x3D.rowRange(0,3)/x3D.at<float>(3);
-
+                // Added 2021-06-09 12:01
+                color = mpCurrentKeyFrame->GetSemanticLabel(kp1.pt.x, kp1.pt.y);
+                // cout << "Linear Triangulation: " << color << endl;
             }
             else if(bStereo1 && cosParallaxStereo1<cosParallaxStereo2)
             {
-                x3D = mpCurrentKeyFrame->UnprojectStereo(idx1);                
+                x3D = mpCurrentKeyFrame->UnprojectStereo(idx1);
+                // Added 2021-06-09 12:01
+                color = mpCurrentKeyFrame->GetSemanticLabel(idx1);
+                // cout << "mpCurrentKeyFrame: " << color << endl;
             }
             else if(bStereo2 && cosParallaxStereo2<cosParallaxStereo1)
             {
                 x3D = pKF2->UnprojectStereo(idx2);
+                // Added 2021-06-09 12:01
+                color = pKF2->GetSemanticLabel(idx2);
+                // cout << "pKF2: " << color << endl;
             }
             else
                 continue; //No stereo and very low parallax
@@ -432,6 +449,8 @@ void LocalMapping::CreateNewMapPoints()
 
             // Triangulation is succesfull
             MapPoint* pMP = new MapPoint(x3D,mpCurrentKeyFrame,mpMap);
+            // Added 2021-06-09 18:32
+            pMP->SetPointColor(color);
 
             pMP->AddObservation(mpCurrentKeyFrame,idx1);            
             pMP->AddObservation(pKF2,idx2);

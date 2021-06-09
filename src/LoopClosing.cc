@@ -31,6 +31,13 @@
 #include<mutex>
 #include<thread>
 
+#include <unistd.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+#include <iostream>
+using namespace std;
+
 
 namespace ORB_SLAM2
 {
@@ -490,6 +497,8 @@ void LoopClosing::CorrectLoop()
 
                 // Project with non-corrected pose and project back with corrected pose
                 cv::Mat P3Dw = pMPi->GetWorldPos();
+                // Added 2021-06-09 21:32
+                cout << "loop correction: " << pMPi->GetPointColor() << endl;
                 Eigen::Matrix<double,3,1> eigP3Dw = Converter::toVector3d(P3Dw);
                 Eigen::Matrix<double,3,1> eigCorrectedP3Dw = g2oCorrectedSwi.map(g2oSiw.map(eigP3Dw));
 

@@ -23,6 +23,10 @@
 
 #include <mutex>
 
+#include <unistd.h>
+#include <stdio.h>
+#include <stdlib.h>
+
 namespace ORB_SLAM2
 {
 
@@ -88,6 +92,7 @@ void Viewer::Run()
     Twc.SetIdentity();
 
     cv::namedWindow("ORB-SLAM2: Current Frame");
+    // cv::namedWindow("ORB-SLAM2: Semantic Info");
 
     bool bFollow = true;
     bool bLocalizationMode = false;
@@ -137,6 +142,14 @@ void Viewer::Run()
         cv::Mat im = mpFrameDrawer->DrawFrame();
         cv::imshow("ORB-SLAM2: Current Frame",im);
         cv::waitKey(mT);
+
+        // Added 2021-06-08 19:50
+        cv::Mat imSeg = mpFrameDrawer->DrawSeg();
+        if(!imSeg.empty())
+        {
+            cv::imshow("ORB-SLAM2: Semantic Info",imSeg);
+            cv::waitKey(mT);
+        }
 
         if(menuReset)
         {
