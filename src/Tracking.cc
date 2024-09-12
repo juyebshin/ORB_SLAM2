@@ -37,6 +37,10 @@
 
 #include<mutex>
 
+#include <unistd.h>
+#include <stdio.h>
+#include <stdlib.h>
+
 
 using namespace std;
 
@@ -264,6 +268,48 @@ cv::Mat Tracking::GrabImageMonocular(const cv::Mat &im, const double &timestamp)
     return mCurrentFrame.mTcw.clone();
 }
 
+// Added 2021-06-08 20:27
+cv::Mat Tracking::GrabImageStereo(const cv::Mat &imRectLeft,const cv::Mat &imRectRight, const cv::Mat &imSeg, const double &timestamp)
+{
+    mImGray = imRectLeft;
+    cv::Mat imGrayRight = imRectRight;
+    // Added 2021-06-08 19:23
+    mImSeg = imSeg;
+
+    if(mImGray.channels()==3)
+    {
+        if(mbRGB)
+        {
+            cvtColor(mImGray,mImGray,CV_RGB2GRAY);
+            cvtColor(imGrayRight,imGrayRight,CV_RGB2GRAY);
+        }
+        else
+        {
+            cvtColor(mImGray,mImGray,CV_BGR2GRAY);
+            cvtColor(imGrayRight,imGrayRight,CV_BGR2GRAY);
+        }
+    }
+    else if(mImGray.channels()==4)
+    {
+        if(mbRGB)
+        {
+            cvtColor(mImGray,mImGray,CV_RGBA2GRAY);
+            cvtColor(imGrayRight,imGrayRight,CV_RGBA2GRAY);
+        }
+        else
+        {
+            cvtColor(mImGray,mImGray,CV_BGRA2GRAY);
+            cvtColor(imGrayRight,imGrayRight,CV_BGRA2GRAY);
+        }
+    }
+
+    mCurrentFrame = Frame(mImGray,imGrayRight,mImSeg,timestamp,mpORBextractorLeft,mpORBextractorRight,mpORBVocabulary,mK,mDistCoef,mbf,mThDepth);
+
+    Track();
+
+    return mCurrentFrame.mTcw.clone();
+}
+
 void Tracking::Track()
 {
     if(mState==NO_IMAGES_YET)
@@ -279,7 +325,7 @@ void Tracking::Track()
     if(mState==NOT_INITIALIZED)
     {
         if(mSensor==System::STEREO || mSensor==System::RGBD)
-            StereoInitialization();
+            StereoInitialization(); // Label done 2021-06-08 22:42
         else
             MonocularInitialization();
 
@@ -302,15 +348,15 @@ void Tracking::Track()
             if(mState==OK)
             {
                 // Local Mapping might have changed some MapPoints tracked in last frame
-                CheckReplacedInLastFrame();
+                CheckReplacedInLastFrame(); // Label done 2021-06-08 22:42 todo
 
                 if(mVelocity.empty() || mCurrentFrame.mnId<mnLastRelocFrameId+2)
                 {
-                    bOK = TrackReferenceKeyFrame();
+                    bOK = TrackReferenceKeyFrame(); // Label done 2021-06-08 22:42
                 }
                 else
                 {
-                    bOK = TrackWithMotionModel();
+                    bOK = TrackWithMotionModel(); // Label done 2021-06-08 22:42
                     if(!bOK)
                         bOK = TrackReferenceKeyFrame();
                 }
@@ -526,8 +572,10 @@ void Tracking::StereoInitialization()
             if(z>0)
             {
                 cv::Mat x3D = mCurrentFrame.UnprojectStereo(i);
+                cv::Scalar color = mCurrentFrame.GetSemanticLabel(i);
                 MapPoint* pNewMP = new MapPoint(x3D,pKFini,mpMap);
                 pNewMP->AddObservation(pKFini,i);
+                pNewMP->SetPointColor(color);
                 pKFini->AddMapPoint(pNewMP,i);
                 pNewMP->ComputeDistinctiveDescriptors();
                 pNewMP->UpdateNormalAndDepth();
@@ -536,6 +584,7 @@ void Tracking::StereoInitialization()
                 mCurrentFrame.mvpMapPoints[i]=pNewMP;
             }
         }
+        cout << "one scalar: " << mCurrentFrame.mvpMapPoints[0]->GetPointColor() << endl;
 
         cout << "New map created with " << mpMap->MapPointsInMap() << " points" << endl;
 
@@ -550,7 +599,7 @@ void Tracking::StereoInitialization()
         mpReferenceKF = pKFini;
         mCurrentFrame.mpReferenceKF = pKFini;
 
-        mpMap->SetReferenceMapPoints(mvpLocalMapPoints);
+        mpMap->SetReferenceMapPoints(mvpLocalMapPoints); // todo check done
 
         mpMap->mvpKeyFrameOrigins.push_back(pKFini);
 
@@ -727,7 +776,7 @@ void Tracking::CreateInitialMapMonocular()
 
     mLastFrame = Frame(mCurrentFrame);
 
-    mpMap->SetReferenceMapPoints(mvpLocalMapPoints);
+    mpMap->SetReferenceMapPoints(mvpLocalMapPoints); //
 
     mpMapDrawer->SetCurrentCameraPose(pKFcur->GetPose());
 
@@ -744,9 +793,13 @@ void Tracking::CheckReplacedInLastFrame()
 
         if(pMP)
         {
+            // temp
+            // cout << "scalar: " << pMP->GetPointColor() << endl;
             MapPoint* pRep = pMP->GetReplaced();
             if(pRep)
             {
+                // temp
+                // cout << "scalar: " << pRep->GetPointColor() << endl;
                 mLastFrame.mvpMapPoints[i] = pRep;
             }
         }
@@ -769,6 +822,9 @@ bool Tracking::TrackReferenceKeyFrame()
     if(nmatches<15)
         return false;
 
+    // temp
+    // for(int i = 0; i < vpMapPointMatches.size(); i++)
+    //     cout << "scalar: " << vpMapPointMatches[i]->GetPointColor() << endl;
     mCurrentFrame.mvpMapPoints = vpMapPointMatches;
     mCurrentFrame.SetPose(mLastFrame.mTcw);
 
@@ -780,6 +836,8 @@ bool Tracking::TrackReferenceKeyFrame()
     {
         if(mCurrentFrame.mvpMapPoints[i])
         {
+            //temp
+            // cout << "TrackReferenceKeyFrame scalar: " << mCurrentFrame.mvpMapPoints[i]->GetPointColor() << endl;
             if(mCurrentFrame.mvbOutlier[i])
             {
                 MapPoint* pMP = mCurrentFrame.mvpMapPoints[i];
@@ -847,7 +905,11 @@ void Tracking::UpdateLastFrame()
         if(bCreateNew)
         {
             cv::Mat x3D = mLastFrame.UnprojectStereo(i);
+            // Added 2021-06-09 00:56
+            cv::Scalar color = mLastFrame.GetSemanticLabel(i);
             MapPoint* pNewMP = new MapPoint(x3D,mpMap,&mLastFrame,i);
+            // Added 2021-06-09 00:56
+            pNewMP->SetPointColor(color);
 
             mLastFrame.mvpMapPoints[i]=pNewMP;
 
@@ -903,6 +965,8 @@ bool Tracking::TrackWithMotionModel()
     {
         if(mCurrentFrame.mvpMapPoints[i])
         {
+            //temp
+            // cout << "TrackWithMotionModel scalar: " << mCurrentFrame.mvpMapPoints[i]->GetPointColor() << endl;
             if(mCurrentFrame.mvbOutlier[i])
             {
                 MapPoint* pMP = mCurrentFrame.mvpMapPoints[i];
@@ -945,6 +1009,8 @@ bool Tracking::TrackLocalMap()
     {
         if(mCurrentFrame.mvpMapPoints[i])
         {
+            //temp
+            // cout << "TrackLocalMap scalar: " << mCurrentFrame.mvpMapPoints[i]->GetPointColor() << endl;
             if(!mCurrentFrame.mvbOutlier[i])
             {
                 mCurrentFrame.mvpMapPoints[i]->IncreaseFound();
@@ -1008,7 +1074,11 @@ bool Tracking::NeedNewKeyFrame()
             if(mCurrentFrame.mvDepth[i]>0 && mCurrentFrame.mvDepth[i]<mThDepth)
             {
                 if(mCurrentFrame.mvpMapPoints[i] && !mCurrentFrame.mvbOutlier[i])
+                {
+                    //temp
+                    // cout << "NeedNewKeyFrame scalar: " << mCurrentFrame.mvpMapPoints[i]->GetPointColor() << endl;
                     nTrackedClose++;
+                }
                 else
                     nNonTrackedClose++;
             }
@@ -1111,8 +1181,11 @@ void Tracking::CreateNewKeyFrame()
                 if(bCreateNew)
                 {
                     cv::Mat x3D = mCurrentFrame.UnprojectStereo(i);
+                    // Added 2021-06-09 00:57
+                    cv::Scalar color = mCurrentFrame.GetSemanticLabel(i);
                     MapPoint* pNewMP = new MapPoint(x3D,pKF,mpMap);
                     pNewMP->AddObservation(pKF,i);
+                    pNewMP->SetPointColor(color);
                     pKF->AddMapPoint(pNewMP,i);
                     pNewMP->ComputeDistinctiveDescriptors();
                     pNewMP->UpdateNormalAndDepth();
@@ -1188,14 +1261,14 @@ void Tracking::SearchLocalPoints()
         // If the camera has been relocalised recently, perform a coarser search
         if(mCurrentFrame.mnId<mnLastRelocFrameId+2)
             th=5;
-        matcher.SearchByProjection(mCurrentFrame,mvpLocalMapPoints,th);
+        matcher.SearchByProjection(mCurrentFrame,mvpLocalMapPoints,th); // todo 2021-06-09 12:02
     }
 }
 
 void Tracking::UpdateLocalMap()
 {
     // This is for visualization
-    mpMap->SetReferenceMapPoints(mvpLocalMapPoints);
+    mpMap->SetReferenceMapPoints(mvpLocalMapPoints); // todo
 
     // Update
     UpdateLocalKeyFrames();
@@ -1220,6 +1293,8 @@ void Tracking::UpdateLocalPoints()
                 continue;
             if(!pMP->isBad())
             {
+                //temp
+                // cout << "UpdateLocalPoints scalar: " << pMP->GetPointColor() << endl;
                 mvpLocalMapPoints.push_back(pMP);
                 pMP->mnTrackReferenceForFrame=mCurrentFrame.mnId;
             }

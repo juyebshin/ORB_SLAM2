@@ -106,7 +106,7 @@ long unsigned int Map::KeyFramesInMap()
 vector<MapPoint*> Map::GetReferenceMapPoints()
 {
     unique_lock<mutex> lock(mMutexMap);
-    return mvpReferenceMapPoints;
+    return mvpReferenceMapPoints; // todo
 }
 
 long unsigned int Map::GetMaxKFid()

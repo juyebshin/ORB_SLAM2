@@ -32,7 +32,9 @@ namespace ORB_SLAM2
 FrameDrawer::FrameDrawer(Map* pMap):mpMap(pMap)
 {
     mState=Tracking::SYSTEM_NOT_READY;
-    mIm = cv::Mat(480,640,CV_8UC3, cv::Scalar(0,0,0));
+    mIm = cv::Mat(376,1241,CV_8UC3, cv::Scalar(0,0,0));
+    // Added 2021-06-08
+    mImSeg = cv::Mat(376,1241,CV_8UC3, cv::Scalar(0,0,0));
 }
 
 cv::Mat FrameDrawer::DrawFrame()
@@ -125,6 +127,17 @@ cv::Mat FrameDrawer::DrawFrame()
     return imWithInfo;
 }
 
+cv::Mat FrameDrawer::DrawSeg()
+{
+    cv::Mat im;
+
+    {
+        unique_lock<mutex> lock(mMutex);
+        mImSeg.copyTo(im);
+    }
+
+    return im;
+}
 
 void FrameDrawer::DrawTextInfo(cv::Mat &im, int nState, cv::Mat &imText)
 {
@@ -168,6 +181,7 @@ void FrameDrawer::Update(Tracking *pTracker)
 {
     unique_lock<mutex> lock(mMutex);
     pTracker->mImGray.copyTo(mIm);
+    pTracker->mImSeg.copyTo(mImSeg);
     mvCurrentKeys=pTracker->mCurrentFrame.mvKeys;
     N = mvCurrentKeys.size();
     mvbVO = vector<bool>(N,false);

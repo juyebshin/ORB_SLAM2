@@ -41,7 +41,7 @@ KeyFrame::KeyFrame(Frame &F, Map *pMap, KeyFrameDatabase *pKFDB):
     mvInvLevelSigma2(F.mvInvLevelSigma2), mnMinX(F.mnMinX), mnMinY(F.mnMinY), mnMaxX(F.mnMaxX),
     mnMaxY(F.mnMaxY), mK(F.mK), mvpMapPoints(F.mvpMapPoints), mpKeyFrameDB(pKFDB),
     mpORBvocabulary(F.mpORBvocabulary), mbFirstConnection(true), mpParent(NULL), mbNotErase(false),
-    mbToBeErased(false), mbBad(false), mHalfBaseline(F.mb/2), mpMap(pMap)
+    mbToBeErased(false), mbBad(false), mHalfBaseline(F.mb/2), mpMap(pMap), mImSeg(F.mImSeg)
 {
     mnId=nNextId++;
 
@@ -629,6 +629,40 @@ cv::Mat KeyFrame::UnprojectStereo(int i)
     else
         return cv::Mat();
 }
+
+// rgb order
+cv::Scalar KeyFrame::GetSemanticLabel(int i)
+{
+    const float z = mvDepth[i];
+    if(z>0 && !mImSeg.empty())
+    {
+        const int u = (int)mvKeys[i].pt.x;
+        const int v = (int)mvKeys[i].pt.y;
+
+        float r = (float)mImSeg.at<cv::Vec3b>(v, u)[2] / 255.;
+        float g = (float)mImSeg.at<cv::Vec3b>(v, u)[1] / 255.;
+        float b = (float)mImSeg.at<cv::Vec3b>(v, u)[0] / 255.;
+
+        unique_lock<mutex> lock(mMutexColor);
+        return cv::Scalar(r, g, b);
+    }
+    else
+        return cv::Scalar(0., 0., 0.);
+}
+
+cv::Scalar KeyFrame::GetSemanticLabel(const int x, const int y)
+{
+    if(mImSeg.empty() || x < 0 || x > mImSeg.cols || y < 0 || y > mImSeg.rows)
+        return cv::Scalar();
+    
+    float r = (float)mImSeg.at<cv::Vec3b>(y, x)[2] / 255.;
+    float g = (float)mImSeg.at<cv::Vec3b>(y, x)[1] / 255.;
+    float b = (float)mImSeg.at<cv::Vec3b>(y, x)[0] / 255.;
+    
+    unique_lock<mutex> lock(mMutexColor);
+    return cv::Scalar(r, g, b);
+}
+
 
 float KeyFrame::ComputeSceneMedianDepth(const int q)
 {
